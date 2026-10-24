@@ -1,0 +1,529 @@
+---
+title: "INDIVIDUAL PROJECT ON ACTUARY"
+author: "NGUETSA VOFO Doriane Vianny"
+date: "2026-04-15"
+output: word_document
+---
+
+# 1. INTRODUCTION
+
+## 1.1 Background of Actuarial Modeling
+
+**Actuarial science** is the discipline that applies mathematical and statistical methods to assess risk in the insurance, finance, and related industries. Historically rooted in mortality studies and life tables (such as *Halley's* 1693 life table and *Gompertz's* 1825 law of mortality), the field has expanded to encompass both life and non-life (property & casualty) insurance, pension fund management, and enterprise risk management. Modern actuarial practice is organized around two broad pillars:
+
+-   **Life Actuarial Science**: is concerned with survival models, life insurance products, annuities, policy reserves, and pension obligations and here, the key random variable is the future lifetime of a policyholder.
+-   **Non-Life Actuarial Science**: focused on claim frequency, severity, aggregate loss distributions, and reinsurance structures. Here, the key random variables are claim counts and claim amounts over a fixed period.
+
+## 1.2 Objectives
+
+This project pursues the following objectives:
+
+1.  Build the foundational survival model, derive the key actuarial functions, and construct a life table for a simulated cohort of 10,000 lives.
+2.  Price life insurance and annuity products using Expected Present Values (EPV) under realistic mortality assumptions.
+3.  Fit *Makeham*'s Law and the *Weibull*'s Law to the cohort and derive net and gross premiums under each parametric family.
+4.  Simulate a portfolio of fire insurance claims using heavy-tailed distributions and analyze an excess-of-loss reinsurance treaty.
+5.  Calculate prospective, retrospective, and recursive policy reserves, and visualize reserve trajectories.
+6.  Extend the single-life framework to multiple-decrement tables (death, disability, withdrawal) and joint-life/last-survivor models.
+7.  Construct a defined-benefit pension valuation using the Projected Unit Credit (PUC) cost method.
+
+## 1.3 Computational Methodology Overview
+
+All simulations are performed in R. The project uses the following packages:
+
+-   **actuar** : Actuarial distributions, Pareto, heavy-tailed losses
+-   **lifecontingencies** : Life tables, EPV of insurance & annuities
+-   **ggplot2** : All visualizations, especially survival curves, reserve paths
+-   **dplyr** : Data wrangling for simulation output
+-   **fitdistrplus** : MLE fitting of Makeham, Weibull, Pareto
+-   **VGAM** : Gompertz-Makeham distribution support
+
+# 2. SURVIVAL MODELS AND DEMOGRAPHIC BASELINES
+
+## 2.1. Core Definitions
+
+1.  **Future Lifetime Random Variable T(x)**: is a continuous positive random variable representing the additional time lived beyond age x : $$\color{blue}{ T(x) = X - x  \quad |\quad  X > x}$$
+
+2.  **Survival Function S(x)**: The survival function (also called the *reliability function*) represents the probability that a newborn survives at least x years:
+
+$$\color{blue}{S(x) = P(X > x) = 1 - F(x),\quad x \geq 0} $$
+
+The probability of surviving at least t more years is: $$\color{blue}{ _t p_x  =  \mathbb{P}(T(x) > t)  =  \frac{S(x+t)}{S(x)} }$$
+
+The probability of dying within t years will be: $$\color{blue}{ _tq_x=1- _tp_x=\mathbb{P}(T(x)\leq t)}$$
+
+3.  **Force of Mortality (Hazard Rate)** $\mu_x$:it is the instantaneous rate of mortality at exact age x $$\color{blue}{\mu_x=-\frac{S'(x)}{S(x)}}$$
+
+We also have the relations bellow: $$\color{blue}{S(x)  =  e^{-\int_0^x \mu_t dt }}$$ and $$ _t p_x  =  e^{-\int_x^{x+t} \mu_s ds} $$
+
+4.  **Central Death Rate and Life Table Functions** : The **central death rate** over $[x, x+1]$ is: $$m_x= \frac{d_x}{L_x}$$
+
+Where: $L_x=\int_0^1 l_{x+t} dt$
+
+A complete life table contain:
+
+-   $d_x=lx-l_{x+1}$ is the number of death during the $x^{th}$ year
+
+-   $l_x$ is the number of people, from an initial cohort, that survived till year x. We have the relation: $$\begin{align}
+    l_{x+t}=l_x * _tp_x\\
+    \Rightarrow    l_{x+t}=l_x * \frac{S(x+t)}{S(x)}\\
+    \Rightarrow   \frac{l_{x+t}}{S(x+t)}=\frac{l_{x}}{S(x)}\\
+    \Rightarrow    \frac{l_{x}}{S(x)}=\frac{l_{0}}{S(0)}  \text{  however }S(0)=1\\
+    \Rightarrow    \frac{l_{x}}{S(x)}=l_0
+    \Rightarrow     l_x=l_0 *S(x)
+    \end{align}$$
+
+$$l_x=l_0 * S(x)$$
+
+-   $q_x=\frac{d_x}{l_x}$ is the annual death probability
+
+## 2.2. Parametric Mortality Laws
+
+1.  **Gompertz Law (1825)**:
+
+Gompertz observed that human mortality increases geometrically with age: $$\mu_x  =  B * c^x,  \qquad  B > 0, c > 1 $$ leading us to: $$ S(x)   =  e^{ -\left(\frac{B}{ln(c)}\right) * (c^x - 1) } $$ 2. **Makeham Law (1860)**:
+
+Makeham extended Gompertz by adding an age-independent component A (capturing accidental deaths): $$\mu_x  =  A + B * c^x, \qquad   A \geq -B,\quad B > 0,\quad c > 1 $$ leading us to: $$ _t p_x =  e^{\left( -A*t - \left(\frac{B*c^x}{ln c}\right) * (c^t - 1) \right)} $$ Typical parameter values from fitted human mortality data are: $A \approx 0.0007 ,\quad B \approx 0.00005 , \quad c \approx 1.095$
+
+3.  **Weibull Law**
+
+Commonly used for aging equipment or biological systems, the force of mortality is
+
+$$\mu_x = \frac{k}{\lambda} \left( \frac{x}{\lambda} \right)^{k-1}$$ leading us to: $$S(x) = \exp\left( -\left( \frac{x}{\lambda} \right)^k \right)$$
+
+Where $k>0$ is the **Shape parameter** and $\lambda>0$ is the **scale parameter**. When $k>1$, mortality is increasing (appropriate for adult human mortality), and when $k<1$, mortality decreases (appropriate for infant mortality)
+
+## 2.3 Survival Models and Life Table Construction - R code
+
+Now, we will simulate a cohort of $n=10000$ independent lives subject to Makeham and Weibull mortality laws using a R Code:
+
+```{r}
+## 1.first of all let us import our libraries
+library(ggplot2)      #for visualizations
+library(dplyr)        #for data wrangling
+library(fitdistrplus) #MLE fitting of Makeham, Weibull
+
+set.seed(32)          #reproducibility
+n <- 10000            #initial number of people in the cohort
+
+
+##from here, we will use abreviations: m-->Makeham; w-->Weibull
+
+## 2.Let us start with Makeham's model parameters
+A_m <- 0.0007
+B_m <- 0.00005
+c_m <- 1.095
+
+    #Makeham force of mortality
+mu_m <- function(x,A=A_m,B=B_m,c=c_m){
+  A+B*c^x
+}
+    #Makeham survival function
+S_m <- function(x,A=A_m,B=B_m,c=c_m){
+   exp(-A*x - (B/log(c))*(c^x - 1)) 
+}
+
+##3. Now let us do  Weibull's model parameters
+k_w <- 4.5        #we choose a shape greater than zero for the risk to increase
+
+lambda_w <- 80    #the scale
+
+     #Makeham force of mortality
+mu_w <- function(x,k=k_w,lambda=lambda_w){
+  (k/lambda)*(x/lambda)^(k-1)
+}
+     #Makeham survival function
+S_w <- function(x,k=k_w,lambda=lambda_w){
+  exp(-(x/lambda)^k)
+}
+
+```
+
+Now that we are done setting our functions, lets suild our life table:
+
+```{r}
+ages <- 0:110        #our chosen range for the ages
+l_0 <- n             #initial cohort: n=10000 people
+
+## 4.Makeham life table
+lx_m <- l_0*sapply(ages,function(x) S_m(x))     #we use the formula mentionned earlier
+dx_m <- -diff(c(lx_m,0))
+qx_m <- dx_m/lx_m
+qx_m[is.nan(qx_m)] <- 1
+
+## 5.Weibull life table
+lx_w <- l_0*sapply(ages,function(x) S_w(x))     #we use the formula mentionned earlier
+dx_w <- -diff(c(lx_w,0))
+qx_w <- dx_w/lx_w
+qx_w[is.nan(qx_w)] <- 1
+
+## 6.let's visualise the evolution of the cohorts populations
+
+plot(ages,lx_m,type = "l", col="blue", lwd=2, xlab="ages", ylab="population", main="evolution of the two cohort's population")
+
+lines(ages,lx_w,col="red", lwd=2)
+grid()
+
+legend("topright", legend = c("Makeham", "Weibull"),col=c("blue","red"),lwd=2)
+
+
+```
+
+**INTERPRETATION**
+
+We can se that this graphic has 3 phases:
+
+-   ages ranging from 0 to 40 years old: here, the two cohorts almost have the same number of people
+-   ages ranging from 40 to 85 years old: here, the people of Weilbull's Cohort are dying faster
+-   ages ranging from 85 to 110 years old: here, the population of the Makeham's cohort are dying more than the other one
+
+Lets now simulate an individual lifetime via inversion:
+
+That means that, Knowing that $U=S(x) \leadsto \mathcal{U}([0,1])$, we will try to invert S to obtain the lifetime x
+
+```{r}
+# First of all lets combine everything into a data frame
+
+lt <- data.frame(
+  age=ages,
+  lx_M = round(lx_m,2),
+  dx_M = round(dx_m,2),
+  qx_M = round(qx_m,6),
+  lx_W = round(lx_w,2),
+  dx_W = round(dx_w,2),
+  qx_W = round(qx_w,6)
+)
+
+print(head(lt,10))
+
+```
+
+```{r}
+#7.Simulate individual lifetimes via inversion (Makeham)
+
+sim_m <- function(n_sim){
+  U <- runif(n_sim)
+  sapply(U,function(u){
+    obj <- function(t) S_m(t)-u  #the function we want to know the root
+    uniroot(obj,c(0.001, 110),tol=1e-8)$root
+  })
+}
+cat("simulating", n, "lifetimes(Makeham)...\n")
+T_m <- sim_m(n)
+cat("mean future lifetime: ", round(mean(T_m),2), " years\n")
+
+```
+
+**INTERPRETATION**: The life expectancy of a cohort under the Makeham model is around $74$ years
+
+Now lets plot our survival function curves
+
+```{r}
+plot_df <- data.frame( 
+  age  = rep(ages, 2), 
+  Sx   = c(lx_m/l_0, lx_w/l_0), 
+  Law  = rep(c('Makeham','Weibull'),each=length(ages))
+) 
+ 
+ggplot(plot_df, aes(x=age, y=Sx, color=Law, linetype=Law)) + 
+  geom_line(size=1.2) + 
+  scale_color_manual(values=c('steelblue','firebrick')) + 
+  labs(title='Survival Functions: Makeham vs Weibull', 
+       x='Age x', y='S(x) = Probability of Survival', 
+       caption='Cohort l_0 = 100,000') + 
+  theme_minimal(base_size=13) + 
+  theme(legend.position='bottom') 
+ 
+ggsave('fig1_survival_functions.png', width=8, height=5, dpi=200)
+```
+
+We can se that this graphic has 3 phases:
+
+-   ages ranging from 0 to 40 years old: here, the two cohorts almost have the same probability of survival
+-   ages ranging from 40 to 85 years old: here, the probability of survival of the Makeham Cohort is greater than of the other cohort.The slopes of both curves are very high in this range:most people die between 40 and 85 years old.
+-   ages ranging from 85 to 110 years old: here, the probability of survival of the Makeham's cohort is lower than the other one.
+
+Now let's plot the force of mortality plot:
+
+```{r}
+x_seq <- seq(0, 110, by=0.5) 
+mu_df <- data.frame( 
+  age = rep(x_seq, 2), 
+  mu  = c(mu_m(x_seq), mu_w(x_seq)), 
+  Law = rep(c('Makeham','Weibull'),each=length(x_seq))
+)
+
+ggplot(mu_df, aes(x=age, y=mu, color=Law)) + 
+geom_line(size=1.1) + 
+scale_color_manual(values=c('steelblue','firebrick')) + 
+labs(title='Force of Mortality: Makeham vs Weibull', 
+x='Age x', y='mu(x)') + 
+theme_minimal(base_size=13) 
+ggsave('fig2_force_mortality.png', width=8, height=5, dpi=200) 
+cat('Section 2 complete.\n')
+```
+
+**INTERPRETATION**
+
+-   from age 0 to around 70 years old, we notice that the forces of mortality of both models are almost equal. the values here are very small $\approx 0$
+
+-   after 70 years old,ther is a massive difference: Makeham model diverges very quickly, compared to Weilbull's
+
+# 3. LIFE INSURANCE AND ANNUITY FUNCTIONS
+
+## 3.1. Valuation Framework
+
+All **Expected Present Values** (EPV) use the actuarial present value discount factor $v = 1/(1+i)$, where i is the annual valuation interest rate. We define the discount function:
+
+$$v^t  =  (1+i)^{-t}  =  e^{-\delta*t} \text{   where     } \delta = ln(1+i) \text{  is the force of interest} $$
+
+## 3.2. Whole Life Insurance - Discrete APV(Actuarial Present Value)
+
+A whole life insurance pays $1 at the end of the year of death. Its expected present value (APV) is 
+denoted A_x: 
+$$ A_x  =  \mathbb{E}[v^{K+1} ]  =  \sum_{k=0}^{\infty} v^{k+1} * _k p_x * q_{x+k} $$
+From this we can obtain this recursion formula: 
+$$A_x  =  v * q_x  +  v * p_x * A_(x+1)$$
+
+## 3.3. Whole Life Insurance — Continuous APV
+
+If the benefit is paid at the moment of death (continuous case), the APV is: 
+$$\bar{A_x}  =  \mathbb{E}[ v^T ]  =  \int_0^{\infty} e^{-\delta*t} * _t p_x * \mu_{x+t} dt $$
+Under UDD (Uniform Distribution of Deaths) within each year: 
+
+$$\bar{A_x}  \approx  \frac{\delta}{ i} * A_x$$
+
+## 3.4. Term Insurance — Discrete 
+
+An n-year term insurance pays $1 if death occurs within n years: 
+
+$$ A^1_{x:n|}  =  \sum_{k=0}^{n-1} v^{k+1} * _k p_x * q_{x+k} $$
+
+## 3.5. Endowment Insurance 
+
+Pays $1 on death within n years OR on survival to n years: 
+
+$$A_{x:n|}  =  A^1_{x:n|}  +  v^n * _n p_x $$
+
+**Important identity** (used in premium calculation):
+
+$$A_{x:n|}  =  1 - d * \ddot{a}_{x:n|}   \text{   where   } d = i/(1+i)$$ 
+
+## 3.6. Life Annuities 
+A whole life annuity-due pays $1 at the beginning of each year the insured survives: 
+$$
+\ddot{a}_x  =  \sum_{k=0}^{\infty} v^k * _k p_x  =  (1 - A_x) / d $$
+
+Temporary life annuity-due (n-year): 
+
+$$\ddot{a}_{x:n|}  =  \sum_{k=0}^{n-1} v^k * _k p_x  =  (1 - A_{x:n|}) / d$$
+## 3.7 EPV Calculations with R
+
+```{r}
+#let's import our libraries
+
+
+library(lifecontingencies)
+library(ggplot2)
+
+# let's build actuarial table from Makeham qx values 
+mak_table <- new("lifetable",
+                 x= ages[1:111],
+                 lx <- lx_m,
+                 name="Makeham"
+                 )
+
+i_val <- 0.05     #we choose 5% annual interest rate
+
+
+    ## 1. Whole life insurance A_x for selected ages
+
+ages_sel <- c(30, 40, 50, 60, 65, 70)   #ages selected
+Ax  <- sapply(ages_sel, function(x) Axn(mak_table, x=x, i=i_val))  # term/whole life insurance, pays 1 at death within n years (or up to limiting age if n is missing), with fractional claim timing.
+ax  <- sapply(ages_sel, function(x) axn(mak_table, x=x, i=i_val))  #survival annuity (immediate/due), with deferment m and k payments per year.
+
+
+#2.  20-year term insurance
+Ax_term <- sapply(ages_sel, function(x) Axn(mak_table, x=x, n=20, i=i_val)) 
+
+#3.  20-year endowment 
+Ax_end  <- sapply(ages_sel, function(x) AExn(mak_table, x=x, n=20, i=i_val))
+
+#4.  Annuity-due a-double-dot_x 
+adx <- sapply(ages_sel, function(x) axn(mak_table, x=x, i=i_val, k=1)) 
+
+#Display results
+
+results <- data.frame( 
+  Age         = ages_sel, 
+  A_x         = round(Ax,  4), 
+  a_x         = round(ax,  4), 
+  A_term20    = round(Ax_term, 4), 
+  A_endow20   = round(Ax_end,  4), 
+  Check_1_dax = round(1 - (i_val/(1+i_val))*adx, 4) 
+) 
+print(results)
+
+
+```
+
+```{r}
+# Verify identity: A_x = 1 - d * a-double-dot_x  
+cat('Identity check (should equal A_x):\n') 
+d <- i_val / (1 + i_val) 
+cat( round(1 - d * adx, 4), '\n' ) 
+ 
+
+```
+As we can see, we obtain the same values as A_x
+
+Let's plot the APV of Whole Life Insurance A_x (Makeham, i=5%)
+
+```{r}
+# Plot A_x vs age 
+full_ages <- 20:100 
+Ax_full <- sapply(full_ages, function(x) Axn(mak_table, x=x, i=i_val)) 
+ggplot(data.frame(age=full_ages, Ax=Ax_full), aes(x=age, y=Ax)) + 
+  geom_line(color='steelblue', size=1.2) + 
+  labs(title='APV of Whole Life Insurance A_x (Makeham, i=5%)', 
+       x='Age at Issue x', y='A_x') + 
+  theme_minimal(base_size=13) 
+ggsave('fig3_Ax_curve.png', width=8, height=5, dpi=200) 
+ 
+```
+
+**INTERPRETATION**
+- We can see that, the older you get, the greater the APV will be, in the case of Whole lifeinsurance
+- that can be explained by the fact that the older you get the riskier it is for you to die, so you have to pay more in order for the insurer to garanty his $1 at the end of the contract
+
+
+# 4. PREMIUM CALCULATION AND RISK MODELS 
+
+
+```{r}
+library(actuar) 
+library(ggplot2) 
+library(dplyr) 
+
+i     <- 0.05 
+d     <- i / (1 + i) 
+x_age <- 40   # issue age 
+n_pol <- 20   # policy term 
+ 
+# Net premium for 20-year endowment 
+Ax_end  <- AExn(mak_table, x=x_age, n=n_pol, i=i) 
+adx_end <- axn(mak_table,  x=x_age, n=n_pol, i=i, k=1) 
+P_net   <- Ax_end / adx_end 
+cat('Net Annual Premium (Endowment 20yr, x=40, i=5%):', round(P_net, 6), '\n') 
+ 
+# Gross premium — assume expenses 
+alpha_exp <- 0.03   # 3% of sum assured initial 
+beta_exp  <- 0.04   # 4% of gross premium renewal 
+gamma_exp <- 0.001  # 0.1% of SA annual maintenance 
+ 
+P_gross <- (Ax_end + alpha_exp + gamma_exp * adx_end) / ((1 - beta_exp) * 
+adx_end) 
+cat('Gross Annual Premium:', round(P_gross, 6), '\n') 
+cat('Loading = Gross - Net:', round(P_gross - P_net, 6), '\n') 
+ 
+# Weibull net premium via numerical integration 
+delta <- log(1 + i) 
+ 
+Ax_weibull_num <- function(x, alpha_w=4.5, sigma_w=80, delta_val=delta) { 
+  integrand <- function(t) { 
+    mu_t <- (alpha_w/sigma_w) * ((x+t)/sigma_w)^(alpha_w-1) 
+    tpx  <- exp( (x/sigma_w)^alpha_w - ((x+t)/sigma_w)^alpha_w ) 
+    exp(-delta_val * t) * tpx * mu_t 
+  } 
+  integrate(integrand, 0, 120-x, subdivisions=500)$value 
+} 
+ 
+ax_weibull_num <- function(x, n_ann, alpha_w=4.5, sigma_w=80, delta_val=delta) { 
+  # Annuity-due: sum over k=0 to n-1 
+  k_vec <- 0:(n_ann-1) 
+  tpx_k <- exp( (x/sigma_w)^alpha_w - ((x+k_vec)/sigma_w)^alpha_w ) 
+  sum( (1+i)^(-k_vec) * tpx_k ) 
+} 
+ 
+Aw40 <- Ax_weibull_num(40)
+
+aw40 <- ax_weibull_num(40, 20) 
+P_weibull <- Aw40 / aw40 
+cat('Weibull A_x (x=40):', round(Aw40,4), '\n') 
+cat('Weibull Net Premium:', round(P_weibull,6), '\n') 
+ 
+# ============================================= 
+# PART B: FIRE CLAIMS SIMULATION 
+# ============================================= 
+ 
+set.seed(42) 
+lambda_freq <- 200      # expected claims per year 
+alpha_par   <- 2.5      # Pareto shape 
+theta_par   <- 100000   # Pareto scale (EUR/USD) 
+ 
+# Simulate number of claims (Poisson) 
+N_claims <- rpois(1000, lambda_freq)  # 1000 years of experience 
+ 
+# Simulate individual claim amounts (Pareto) 
+# actuar::rpareto2 parameterization: scale=theta, shape=alpha 
+total_claims <- sum(N_claims) 
+X_claims <- rpareto(total_claims, shape=alpha_par, scale=theta_par) 
+ 
+cat('\n--- Fire Claims Summary ---\n') 
+cat('Total simulated claims:', total_claims, '\n') 
+cat('Mean claim size:', round(mean(X_claims)), '\n') 
+cat('Theoretical mean:', round(theta_par/(alpha_par-1)), '\n') 
+cat('99th percentile:', round(quantile(X_claims, 0.99)), '\n') 
+ 
+# XL Treaty Analysis 
+M_vec <- c(50000, 100000, 200000, 500000)  # retention limits 
+ 
+xl_analysis <- data.frame(Retention_M = M_vec) |> 
+  mutate( 
+    # Theoretical E[(X-M)+] 
+    E_XL_theory = (theta_par/(alpha_par-1)) * 
+                  (theta_par/(M_vec + theta_par))^(alpha_par-1), 
+    # Simulated E[(X-M)+] 
+    E_XL_sim    = sapply(M_vec, function(M) mean(pmax(X_claims - M, 0))), 
+    # Insurer expected cost per claim 
+    E_insurer   = sapply(M_vec, function(M) mean(pmin(X_claims, M))), 
+    # Reinsurance cost as % of gross premium 
+    RI_pct      = sapply(M_vec, function(M) {
+                          mean(pmax(X_claims - M, 0)) / mean(X_claims) * 100 
+                  }) 
+  ) 
+ 
+print(xl_analysis) 
+ 
+# ---- Plot: Claim severity distribution ---- 
+ggplot(data.frame(x = X_claims[X_claims < 1e6]), aes(x=x)) + 
+  geom_histogram(aes(y=..density..), bins=80, 
+                 fill='steelblue', alpha=0.7, color='white') + 
+  stat_function(fun=function(x) dpareto(x, shape=alpha_par, scale=theta_par), 
+                color='firebrick', size=1) + 
+  scale_x_continuous(labels=scales::comma) + 
+  labs(title='Fire Claim Severity — Pareto Fit', 
+       x='Claim Amount', y='Density', 
+       subtitle=paste0('Pareto(alpha=',alpha_par,', theta=', 
+                        format(theta_par,big.mark=','),')')) + 
+  theme_minimal(base_size=13) 
+ggsave('fig4_fire_claims.png', width=8, height=5, dpi=200) 
+ 
+# ---- Plot: XL layer cost vs retention ---- 
+ggplot(xl_analysis, aes(x=Retention_M/1000, y=E_XL_theory)) + 
+  geom_line(color='firebrick', size=1.2) + 
+  geom_point(size=3, color='firebrick') + 
+  scale_x_continuous(labels=function(x) paste0(x,'k')) + 
+  scale_y_continuous(labels=scales::comma) + 
+  labs(title='Expected XL Reinsurance Cost vs Retention Limit', 
+       x='Retention M (thousands)', y='E[(X-M)+] per Claim') + 
+  theme_minimal(base_size=13) 
+ggsave('fig5_xl_reinsurance.png', width=8, height=5, dpi=200) 
+ 
+cat('Section 4 complete.\n') 
+```
+
+
+
+
+
+
