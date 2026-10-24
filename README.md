@@ -1,0 +1,2 @@
+# Modelisation-Actuarielle-Tarification-et-Provisionnement
+Construction d'un modèle actuariel global couvrant l'assurance vie et non-vie: ajustement des lois de mortalité de Makeham, et Weibull pour évaluer les valeurs actuelles probables le la prime; En non-vie, la simulation de sinistres incendie a permis de modéliser le coût moyen par sinistre et d'optimiser un traité de réassurance en Excess of Loss.
